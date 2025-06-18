@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <!-- REFACTOR: Viewport optimizado para móviles, incluyendo soporte para áreas seguras (notches) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Agenda aiDANaI</title>
+    
+    <!-- Parse SDK (para Back4App) -->
+    <script src="https://npmcdn.com/parse/dist/parse.min.js"></script>
+
+    <!-- REFACTOR: PWA Manifest ahora en un <link> para mejor práctica, pero inline funciona bien para single-file apps -->
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICAgIm5hbWUiOiAiQWdlbmRhIGFpREFOBUIiLAogICAgInNob3J0X25hbWUiOiAiYWlEQU5BSSIsCiAgICAiZGVzY3JpcHRpb24iOiAiR2VzdG9yIGRlIHRhcmVhcyB5IGFnZW5kYSBlc3RpbG8gSm9ydGUgY29uIGJhY2tlbmQgQmFjazRBcHAuIiwKICAgICJzdGFydF91cmwiOiAiLiIsCiAgICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAgICJCYWNrZ3JvdW5kX2NvbG9yIjogIiMwMDAwMDAiLAogICAgInRoZW1lX2NvbG9yIjogIiMwMDAwMDAiLAogICAgImljb25zIjogWwogICAgICAgIHsgInNyYyI6ICJhaURBTmFJX2ljb25fMTkyLnBuZyIsICJzaXplcyI6ICIxOTJ4MTkyIiwgInR5cGUiOiAiaW1hZ2UvcG5nIiB9LAogICAgICAgIHsgInNyYyI6ICJhaURBTmFJX2ljb25fNTEyLnBuZyIsICJzaXplcyI6ICI1MTJ4NTEyIiwgInR5cGUiOiAiaW1hZ2UvcG5nIiB9CiAgICBdCn0=">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="aiDANaI_icon_192.png">
+
+    <style>
+        /* CSS Reset y Variables */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            /* Tema oscuro AMOLED */
+            --bg-primary: #000000;
+            --bg-secondary: #111111;
+            --bg-tertiary: #222222;
+            --bg-quaternary: #333333;
+            --text-primary: #EAEAEA; /* REFACTOR: Ligeramente menos blanco para confort visual */
+            --text-secondary: #B0B0B0;
+            --text-muted: #888888;
+            
+            --accent-dani: #0A84FF;
+            --accent-dani-glow: rgba(10, 132, 255, 0.3);
+            --accent-dani-hover: #0073e6;
+            --accent-dani-text: #FFFFFF;
+
+            --accent-norma: #FF453A;
+            --accent-norma-glow: rgba(255, 69, 58, 0.3);
+            --accent-norma-hover: #e6362c;
+            --accent-norma-text: #FFFFFF;
+
+            --accent-comun: #30D158;
+            --accent-comun-glow: rgba(48, 209, 88, 0.3);
+            --accent-comun-hover: #29b74e;
+            --accent-comun-text: #000000; 
+            
+            --current-user-accent: var(--accent-dani); 
+            --current-user-accent-glow: var(--accent-dani-glow);
+            --current-user-accent-hover: var(--accent-dani-hover);
+
+            --border-subtle: #333333;
+            --border-medium: #444444;
+            --shadow-soft: rgba(0, 0, 0, 0.5);
+            --font-geist: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; 
+            
+            --header-height: 50px;
+            --nav-height: 55px; /* REFACTOR: Ligeramente más alto para mejor tacto */
+        }
+
+        html {
+            /* REFACTOR: Ajuste para PWA en iOS */
+            height: -webkit-fill-available;
+        }
+        
+        body {
+            font-family: var(--font-geist);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            font-size: 16px; /* REFACTOR: Base de 16px para accesibilidad, usar rems */
+            line-height: 1.4;
+        }
+        
+        /* REFACTOR: Estado de foco visible para toda la app para accesibilidad */
+        *:focus-visible {
+            outline: 2px solid var(--current-user-accent);
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px var(--current-user-accent-glow);
+            border-radius: 4px;
+        }
+
+        /* --- Estructura Principal --- */
+        #app-root {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            height: 100%;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in, visibility 0.3s;
+        }
+        #app-root.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* REFACTOR: Uso de <header> semántico */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 0.5rem;
+            height: var(--header-height);
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+            /* REFACTOR: padding para áreas seguras en iOS (notch) */
+            padding-left: calc(0.5rem + env(safe-area-inset-left));
+            padding-right: calc(0.5rem + env(safe-area-inset-right));
+        }
+
+        .header-group { display: flex; align-items: center; gap: 0.25rem; }
+        .header-center { font-size: 1rem; font-weight: 600; text-transform: capitalize; }
+        .header-center span { margin: 0 0.5rem; }
+
+        /* REFACTOR: Botones de header con área táctil mejorada (44x44px) */
+        .header-btn {
+            background: none; border: none; color: var(--text-secondary); cursor: pointer;
+            width: 44px; height: 44px; /* Área táctil mínima */
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            font-size: 1.2rem; /* Tamaño del icono */
+        }
+        .header-btn svg { width: 22px; height: 22px; fill: currentColor; }
+        .header-btn:hover, .header-btn:focus-visible { background-color: var(--bg-tertiary); color: var(--text-primary); }
+        .header-btn:active { background-color: var(--bg-quaternary); transform: scale(0.95); }
+
+        #today-btn-header {
+            font-size: 0.8rem; font-weight: 600; padding: 0 1rem; height: 36px;
+            border: 1px solid var(--border-medium); border-radius: 18px;
+            width: auto;
+        }
+        #current-user-display-header { font-size: 0.8rem; margin-right: 0.25rem; color: var(--current-user-accent); font-weight: bold; }
+
+        /* REFACTOR: Uso de <main> semántico */
+        main {
+            flex-grow: 1;
+            overflow: hidden; /* Las secciones internas tendrán su propio scroll */
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        /* REFACTOR: Uso de <section> para cada vista */
+        .view-section {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0.75rem;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
+        }
+        .view-section.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .view-title {
+             /* REFACTOR: Título de vista con tipografía responsive (clamp) */
+            font-size: clamp(1.5rem, 5vw, 1.8rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        /* REFACTOR: Uso de <nav> semántico */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border-subtle);
+            height: var(--nav-height);
+            flex-shrink: 0;
+            /* REFACTOR: padding para barra de home en iOS */
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.65rem; font-weight: 500;
+            cursor: pointer; transition: all 0.2s ease;
+            flex: 1; text-align: center;
+            border-radius: 8px; margin: 4px;
+        }
+        .nav-item:hover { background-color: var(--bg-tertiary); }
+        .nav-item:active { transform: scale(0.95); }
+        .nav-item.active { color: var(--current-user-accent); font-weight: 700; }
+        .nav-item-icon { font-size: 1.5rem; line-height: 1; }
+
+        /* --- Componentes --- */
+        
+        /* REFACTOR: FAB con tamaño y posicionamiento revisado para evitar solapamiento con nav bar */
+        #fab-add-item {
+            position: fixed;
+            bottom: calc(var(--nav-height) + 1rem + env(safe-area-inset-bottom));
+            right: 1rem;
+            width: 56px; height: 56px; /* Tamaño generoso para el tacto */
+            background-color: var(--current-user-accent); color: var(--accent-dani-text);
+            border-radius: 50%; border: none; font-size: 2rem; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 12px var(--shadow-soft);
+            cursor: pointer; z-index: 99;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #fab-add-item:hover { transform: scale(1.05) rotate(15deg); }
+        #fab-add-item:active { transform: scale(0.95); }
+
+        /* REFACTOR: Modal con rol ARIA para accesibilidad */
+        .modal {
+            display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--bg-secondary);
+            padding: 1rem 1.25rem; border: 1px solid var(--border-medium); width: 92%; max-width: 400px;
+            border-radius: 12px; box-shadow: 0 5px 25px var(--shadow-soft);
+            animation: modalOpen 0.3s ease-out;
+        }
+        @keyframes modalOpen { from { transform: translateY(20px) scale(0.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        
+        /* REFACTOR: Formularios optimizados para móvil */
+        .form-group label {
+            display: block; margin-bottom: 0.5rem; font-size: 0.8rem;
+            font-weight: 600; color: var(--text-secondary);
+        }
+        .form-group input[type="text"], .form-group input[type="date"], .form-group select, .form-group textarea {
+            width: 100%; padding: 0.75rem; border: 1px solid var(--border-medium);
+            border-radius: 8px; background-color: var(--bg-tertiary);
+            color: var(--text-primary); font-size: 1rem;
+            transition: border-color 0.2s ease;
+            -webkit-appearance: none; /* Quita estilos por defecto de iOS */
+        }
+        .form-group textarea { min-height: 80px; resize: vertical; }
+
+        .btn {
+            padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: 700;
+            font-size: 1rem; cursor: pointer; transition: all 0.2s ease; border: none;
+        }
+        .btn-primary { background-color: var(--current-user-accent); color: var(--accent-dani-text); }
+        .btn-primary:hover { background-color: var(--current-user-accent-hover); }
+        .btn-primary:active { transform: scale(0.98); }
+
+        /* --- Intro Screen (código sin cambios significativos en estilo, ya era bueno) --- */
+        .intro-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-primary); padding: 20px; text-align: center; transition: opacity 0.5s ease-out, transform 0.5s ease-out; }
+        #initial-user-selection-screen { visibility: hidden; opacity: 0; transform: translateY(20px); }
+        #initial-user-selection-screen.visible { visibility: visible; opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+        .user-selection-card { background-color: var(--bg-secondary); padding: 1.8rem 1.3rem; border-radius: 12px; box-shadow: 0 8px 30px var(--shadow-soft); width: 100%; max-width: 360px; border: 1px solid var(--border-subtle); }
+        .user-selection-logo-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 1.2rem; }
+        .user-selection-logo-text { font-size: clamp(1.4rem, 4.5vw, 1.8rem); font-weight: 700; background: linear-gradient(to right, var(--accent-dani), var(--accent-norma), var(--accent-comun)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .profile-buttons button { margin: 0.4rem 0.2rem; width: calc(50% - 0.6rem); max-width: 130px; padding: 12px 10px; border: 1px solid var(--border-medium); background-color: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; border-radius: 7px; font-size: 0.9rem; transition: all 0.2s ease; cursor: pointer; }
+        .profile-buttons button:hover { background-color: var(--bg-quaternary); transform: translateY(-2px); box-shadow: 0 4px 10px var(--shadow-soft); }
+        .profile-buttons button.profile-dani { border-color: var(--accent-dani); color: var(--accent-dani); }
+        .profile-buttons button.profile-norma { border-color: var(--accent-norma); color: var(--accent-norma); }
+        #personalized-greeting-screen { visibility: hidden; opacity: 0; }
+        #personalized-greeting-screen.visible { visibility: visible; opacity: 1; }
+        #personalized-greeting-text { font-size: clamp(1.8rem, 7vw, 2.8rem); line-height: 1.3; font-weight: 500; max-width: 90%; opacity: 0; transform: scale(0.9); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+        #personalized-greeting-text.visible { opacity: 1; transform: scale(1); }
+        #intro-animation { visibility: hidden; opacity: 0; }
+        #intro-animation.visible { visibility: visible; opacity: 1; transition: opacity 0.2s linear; }
+        #zoom-image { display: block; max-width: 65%; max-height: 65%; object-fit: contain; border-radius: 12px; filter: drop-shadow(0 0 12px var(--current-user-accent-glow)); opacity: 0; transform: scale(0.1); }
+        #zoom-image.animate-image { animation: elegantIntro 3.0s cubic-bezier(0.25, 0.1, 0.25, 1) forwards; }
+        @keyframes elegantIntro { 0%   { transform: scale(0.1) rotate(-3deg); opacity: 0; filter: blur(15px) drop-shadow(0 0 15px var(--current-user-accent-glow)); } 20%  { opacity: 1; filter: blur(0px) drop-shadow(0 0 25px var(--current-user-accent-glow)); }  70%  { transform: scale(1) rotate(0deg); opacity: 1; filter: blur(0px) drop-shadow(0 0 30px var(--current-user-accent-glow)); }  90%  { transform: scale(1.05) rotate(1deg); opacity: 1; }  100% { transform: scale(3); opacity: 0; filter: blur(10px) drop-shadow(0 0 50px var(--current-user-accent-glow)); }  }
+
+        /* --- Calendar View Specifics --- */
+        /* MODIFICACIÓN: La vista de calendario no tendrá padding y usará toda la altura disponible */
+        #calendar-view {
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        /* MODIFICACIÓN: El contenedor de la parrilla del calendario ocupa el 50% de la altura */
+        .calendar-grid-container {
+            height: 50%;
+            display: flex;
+            flex-direction: column;
+            padding: 0.5rem 0.75rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            /* NUEVO: Definir las filas para que se ajusten al espacio disponible */
+            grid-template-rows: auto repeat(6, 1fr);
+            gap: 1px;
+            background-color: var(--border-subtle);
+            flex-grow: 1; /* Ocupa el espacio disponible en el contenedor */
+        }
+        .calendar-day-name { 
+            font-weight: 600; font-size: 0.7rem; color: var(--text-secondary); padding: 0.5rem 0; 
+            text-align: center; background-color: var(--bg-tertiary); text-transform: uppercase; 
+        }
+        .calendar-day-name:nth-of-type(6) { color: #80bfff !important; }
+        .calendar-day-name:nth-of-type(7) { color: #ff8080 !important; }
+        
+        /* MODIFICACIÓN: Estilos de celda del día para alojar más contenido */
+        .calendar-day {
+            background-color: var(--bg-secondary); padding: 0.25rem; cursor: pointer;
+            /* MODIFICACIÓN: Eliminamos aspect-ratio para permitir celdas rectangulares */
+            display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+            border: 2px solid transparent; border-radius: 4px;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            overflow: hidden; /* Evita que el contenido se desborde */
+        }
+        .calendar-day:hover { background-color: var(--bg-tertiary); }
+        .calendar-day.other-month { opacity: 0.4; pointer-events: none; background-color: #0a0a0a; }
+        .calendar-day.selected { border-color: var(--current-user-accent); background-color: var(--bg-tertiary); }
+        .calendar-day.today .day-number {
+            background-color: var(--current-user-accent); color: var(--accent-dani-text);
+            border-radius: 50%; font-weight: 700;
+        }
+        .day-number { 
+            font-size: 0.8rem; font-weight: 500; width: 1.75rem; height: 1.75rem; 
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0; /* Evita que el número se encoja */
+            align-self: flex-end; /* Alinea el número a la derecha */
+        }
+        .calendar-day.weekend-sat .day-number { color: #80bfff; } 
+        .calendar-day.weekend-sun .day-number { color: #ff8080; } 
+
+        /* NUEVO: Contenedor para la lista de eventos dentro de la celda */
+        .day-events-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 2px;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        /* NUEVO: Estilo para cada evento individual en la celda */
+        .day-event {
+            font-size: 0.6rem;
+            line-height: 1.2;
+            padding: 1px 3px 1px 5px;
+            border-radius: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+            background-color: var(--bg-quaternary);
+            color: var(--text-secondary);
+            border-left: 3px solid; /* El color se asignará por clase */
+        }
+        .day-event.owner-Dani { border-left-color: var(--accent-dani); }
+        .day-event.owner-Norma { border-left-color: var(--accent-norma); }
+        .day-event.owner-Comun { border-left-color: var(--accent-comun); }
+
+        /* MODIFICACIÓN: El área de detalles del día ocupa el 50% de la altura */
+        .day-detail-area {
+            height: 50%;
+            padding: 0.75rem;
+            overflow-y: auto;
+            flex-grow: 0; /* Desactivamos flex-grow para usar altura fija */
+            flex-shrink: 0;
+        }
+        
+        /* REFACTOR: Uso de <article> para cada item, mejorando la semántica */
+        .item-card {
+            background-color: var(--bg-tertiary); border-radius: 8px;
+            padding: 0.75rem 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border-left: 4px solid var(--current-user-accent);
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .item-card.owner-Dani { border-left-color: var(--accent-dani); }
+        .item-card.owner-Norma { border-left-color: var(--accent-norma); }
+        .item-card.owner-Comun { border-left-color: var(--accent-comun); }
+        .item-card.completed { opacity: 0.6; border-left-color: var(--text-muted); background-color: var(--bg-quaternary); } 
+        .item-card.completed .item-card-title { text-decoration: line-through; color: var(--text-secondary); }
+        
+        .item-card-content { flex-grow: 1; }
+        .item-card-title { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.25rem; word-break: break-word; }
+        .item-card-meta { display: flex; align-items: center; font-size: 0.7rem; color: var(--text-muted); gap: 0.75rem; }
+        .item-card-owner { font-weight: 700; padding: 2px 6px; border-radius: 4px; color: var(--text-primary); }
+        .item-card-owner.owner-Dani { background-color: var(--accent-dani); }
+        .item-card-owner.owner-Norma { background-color: var(--accent-norma); }
+        .item-card-owner.owner-Comun { background-color: var(--accent-comun); color: var(--accent-comun-text); }
+        
+        .item-card-actions { display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; }
+        .item-card-action {
+            background: none; border: none; color: var(--text-secondary); cursor: pointer;
+            width: 36px; height: 36px; font-size: 1rem; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .item-card-action:hover, .item-card-action:focus-visible { color: var(--text-primary); background-color: var(--bg-quaternary); }
+        .item-card-action:active { transform: scale(0.9); }
+
+        .item-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .no-items { font-size: 0.9rem; color: var(--text-muted); text-align: center; padding: 2rem 0; }
+        .list-section-title { font-size: 0.8rem; color: var(--text-muted); margin-top: 1.5rem; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 600; }
+        
+        /* --- Ayuda --- */
+        .help-section { margin-bottom: 1rem; background-color: var(--bg-secondary); border-radius: 8px; padding: 1rem; } 
+        .help-section h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 700; } 
+        .help-section p, .help-section li { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.5rem; } 
+        .help-section ul { margin-left: 1rem; } .help-section .highlight { color: var(--current-user-accent); font-weight: 600; }
+
+        /* --- Toast --- */
+        #toast-container { position: fixed; bottom: calc(var(--nav-height) + 1rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 2000; width: max-content; max-width: 90%; pointer-events: none; } 
+        .toast { background-color: rgba(40, 40, 40, 0.95); backdrop-filter: blur(5px); color: var(--text-primary); padding: 0.75rem 1.25rem; border-radius: 2rem; margin-bottom: 0.5rem; box-shadow: 0 4px 10px var(--shadow-soft); display: flex; align-items: center; animation: toastFadeIn 0.3s, toastFadeOut 0.3s 2.7s; font-size: 0.9rem; } 
+        @keyframes toastFadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastFadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(15px); } }
+    </style>
+</head>
+<body>
+
+    <!-- El resto del HTML no necesita cambios... -->
+    
+    <!-- Intro Screens -->
+    <div id="initial-user-selection-screen" class="intro-screen">
+         <div class="user-selection-card">
+            <div class="user-selection-logo-container">
+                 <div class="user-selection-logo-text">Agenda aiDANaI</div>
+            </div>
+            <!-- REFACTOR: h1 para el título principal de la pantalla de bienvenida -->
+            <h1 class="user-selection-logo-text" style="margin-bottom: 0.5rem; font-size: 1.3rem;">Selecciona tu perfil:</h1>
+            <div class="profile-buttons">
+                <button class="profile-dani" data-user="Dani">Dani</button>
+                <button class="profile-norma" data-user="Norma">Norma</button>
+            </div>
+        </div>
+    </div>
+    <div id="personalized-greeting-screen" class="intro-screen"> 
+        <p id="personalized-greeting-text" role="status"></p> 
+    </div>
+    <div id="intro-animation" class="intro-screen"> 
+        <img id="zoom-image" src="aiDANaI_icon_192.png" alt="Logo de la aplicación animado"> 
+    </div>
+
+    <!-- REFACTOR: Raíz de la aplicación que se muestra tras la intro -->
+    <div id="app-root">
+        <!-- REFACTOR: <header> semántico -->
+        <header class="app-header">
+            <div class="header-group">
+                <button id="user-menu-btn" class="header-btn" title="Menú de Usuario y Ayuda">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button> 
+            </div>
+            <div class="header-group header-center" id="calendar-controls">
+                <button id="prev-month-btn-header" class="header-btn" title="Mes anterior">&lsaquo;</button>
+                <span id="current-month-year-display"></span>
+                <button id="next-month-btn-header" class="header-btn" title="Mes siguiente">&rsaquo;</button>
+            </div>
+            <div class="header-group">
+                <span id="current-user-display-header"></span>
+                <button id="today-btn-header" class="header-btn" title="Hoy">Hoy</button>
+                <button id="logout-btn-header" class="header-btn" title="Cerrar Sesión">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9z" fill="currentColor"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- REFACTOR: <main> semántico que contiene las vistas dinámicas -->
+        <main id="main-content-area" tabindex="-1">
+            <!-- Las vistas se renderizarán aquí como <section> -->
+        </main>
+
+        <!-- FAB (Botón Flotante) -->
+        <button id="fab-add-item" title="Añadir Nuevo Ítem">+</button>
+
+        <!-- REFACTOR: <nav> semántico para la navegación principal -->
+        <nav class="bottom-nav" aria-label="Navegación principal">
+             <button class="nav-item" data-view="calendar" title="Calendario"><div class="nav-item-icon">📅</div><span>Agenda</span></button>
+             <button class="nav-item" data-view="tasks" title="Lista de Tareas"><div class="nav-item-icon">✓</div><span>Tareas</span></button>
+             <button class="nav-item" data-view="help" title="Ayuda y Configuración"><div class="nav-item-icon">⚙️</div><span>Ayuda</span></button>
+        </nav>
+    </div>
+
+    <!-- REFACTOR: Modal con roles ARIA -->
+    <div id="add-item-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-content">
+            <form id="add-item-form">
+                 <h3 id="modal-title" class="view-title" style="margin-bottom: 1.5rem; font-size: 1.5rem; text-align: center;">Añadir Ítem</h3>
+                <input type="hidden" id="item-id"><input type="hidden" id="item-local-id">
+                <div class="form-group"><label for="item-type">Tipo:</label><select id="item-type" required><option value="task">Tarea</option><option value="agenda">Evento de Agenda</option></select></div>
+                <div class="form-group"><label for="item-description">Descripción:</label><textarea id="item-description" required placeholder="Describe el ítem..."></textarea></div>
+                <div class="form-group" id="due-date-group"><label for="item-due-date">Fecha:</label><input type="date" id="item-due-date"></div>
+                <div class="form-group"><label for="item-owner">Propietario:</label><select id="item-owner" required><option value="Dani">Dani</option><option value="Norma">Norma</option><option value="Comun">Común</option></select></div>
+                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-secondary" id="cancel-item-btn" style="flex:1;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="save-item-btn" style="flex:2;">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Contenedor de Toasts -->
+    <div id="toast-container"></div>
+
+    <script>
+        // --- Back4App & Constantes ---
+        const PARSE_APP_ID = "v6TC3TP1vvPfkVXErWsox54UQtj9G6vJr8aTWpLl";
+        const PARSE_JS_KEY = "ZomACaFL7RcBKbwfOvonnJ4JLNp1jBTlYaDTIMhy";
+        const PARSE_SERVER_URL = "https://parseapi.back4app.com/";
+        Parse.initialize(PARSE_APP_ID, PARSE_JS_KEY);
+        Parse.serverURL = PARSE_SERVER_URL;
+
+        const ICON_EDIT = '✎', ICON_DELETE = '🗑️', ICON_DUPLICATE = '🔄', ICON_COMPLETE = '✓';
+        const citasFamosas = [ { cita: "Pienso, luego existo.", autor: "René Descartes" }, { cita: "Sé el cambio que quieres ver en el mundo.", autor: "Mahatma Gandhi" }, { cita: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.", autor: "John Lennon" }, { cita: "La imaginación es más importante que el conocimiento.", autor: "Albert Einstein" }, { cita: "No hay camino para la paz, la paz es el camino.", autor: "Mahatma Gandhi" } ];
+        const gebi = id => document.getElementById(id);
+        const qs = selector => document.querySelector(selector);
+        const qsa = selector => document.querySelectorAll(selector);
+        
+        // REFACTOR: El estado de la App ahora incluye la vista activa de forma más robusta
+        const AppState = { currentUser: null, items: [], currentView: 'calendar', calendar: { currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear(), selectedDate: dateToYYYYMMDD(new Date()) }, isLoading: false };
+        
+        // --- Helpers (sin cambios significativos, ya eran buenos) ---
+        function dateToYYYYMMDD(date) { if (!(date instanceof Date) || isNaN(date)) { const now = new Date(); return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`; } return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; }
+        function YYYYMMDDToDate(dateStr) { if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null; const parts = dateStr.split('-'); return new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))); }
+        function showToast(message) { const tc = gebi('toast-container'); if (!tc) return; const t = document.createElement('div'); t.className = `toast`; t.textContent = message; tc.appendChild(t); setTimeout(() => { t.remove(); }, 3300); }
+        function setLoading(isLoading) { AppState.isLoading = isLoading; /* Podrías añadir un spinner global aquí */ }
+        function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
+        function parseObjectToAppItem(p) { if (!p) return null; return { id: p.id, type: p.get('type'), description: p.get('description'), owner: p.get('owner'), isComplete: p.get('isComplete') || false, createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(), createdBy: p.get('createdBy'), completedAt: p.get('completedAt') ? p.get('completedAt').getTime() : null, lastModified: p.updatedAt ? p.updatedAt.getTime() : Date.now(), lastModifiedBy: p.get('lastModifiedBy'), dueDate: p.get('dueDate') ? dateToYYYYMMDD(new Date(p.get('dueDate'))) : null, localId: p.get('localId') || p.id }; }
+        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const TODO_ITEM_CLASS_NAME = 'TodoItem'; // Definición faltante
+
+        // --- Lógica de la App ---
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        function initializeApp() {
+            if (!PARSE_APP_ID || PARSE_APP_ID.includes("YOUR")) {
+                alert("Error: Configuración de backend incompleta.");
+                return;
+            }
+            showUserSelectionScreen();
+            attachGlobalEventListeners(); 
+        }
+        
+        function showUserSelectionScreen() {
+            gebi('app-root').classList.remove('visible');
+            gebi('initial-user-selection-screen').classList.add('visible');
+            qsa('.profile-buttons button').forEach(b => {
+                if (!b.dataset.listenerAttached) {
+                    b.addEventListener('click', () => selectUserProfile(b.dataset.user));
+                    b.dataset.listenerAttached = 'true';
+                }
+            });
+        }
+        
+        // REFACTOR: Intro sequence con async/await para legibilidad y robustez
+        async function selectUserProfile(userName) {
+            AppState.currentUser = { name: userName };
+            localStorage.setItem('currentUser', JSON.stringify(AppState.currentUser));
+            setUserSpecificStyles(userName);
+
+            const selectionScreen = gebi('initial-user-selection-screen');
+            const greetingScreen = gebi('personalized-greeting-screen');
+            const greetingText = gebi('personalized-greeting-text');
+            const introScreen = gebi('intro-animation');
+            const zoomImage = gebi('zoom-image');
+
+            selectionScreen.style.opacity = '0';
+            await wait(500);
+            selectionScreen.classList.remove('visible');
+
+            const { cita, autor } = citasFamosas[Math.floor(Math.random() * citasFamosas.length)];
+            greetingText.innerHTML = `"${cita}"<br><span style="font-size:0.6em; color:var(--text-muted);">- ${autor} -</span>`;
+            greetingScreen.classList.add('visible');
+            await wait(50);
+            greetingText.classList.add('visible');
+            await wait(3500);
+
+            greetingText.classList.remove('visible');
+            greetingScreen.style.opacity = '0';
+            await wait(500);
+            greetingScreen.classList.remove('visible');
+
+            introScreen.classList.add('visible');
+            await wait(50);
+            zoomImage.classList.add('animate-image');
+            await wait(3000);
+
+            introScreen.style.opacity = '0';
+            await wait(500);
+            introScreen.classList.remove('visible');
+            zoomImage.classList.remove('animate-image');
+            
+            loadDataAndInitializeApp();
+        }
+
+        function setUserSpecificStyles(userName) {
+            const accentVar = userName === 'Dani' ? 'var(--accent-dani)' : 'var(--accent-norma)';
+            const accentGlowVar = userName === 'Dani' ? 'var(--accent-dani-glow)' : 'var(--accent-norma-glow)';
+            const accentHoverVar = userName === 'Dani' ? 'var(--accent-dani-hover)' : 'var(--accent-norma-hover)';
+            document.documentElement.style.setProperty('--current-user-accent', accentVar);
+            document.documentElement.style.setProperty('--current-user-accent-glow', accentGlowVar);
+            document.documentElement.style.setProperty('--current-user-accent-hover', accentHoverVar);
+            gebi('current-user-display-header').textContent = userName;
+        }
+
+        function loadDataAndInitializeApp() {
+            gebi('app-root').classList.add('visible');
+            loadDataFromLocalStorage();
+            fetchDataFromBackend(); 
+            if (!AppState.isLoading) {
+                switchView('calendar');
+            }
+        }
+        
+        function attachGlobalEventListeners() {
+            qsa('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
+            window.addEventListener('click', e => { if (e.target.classList.contains('modal')) closeModal(); });
+            gebi('add-item-form')?.addEventListener('submit', handleItemFormSubmit);
+            gebi('cancel-item-btn')?.addEventListener('click', closeModal);
+            gebi('item-type')?.addEventListener('change', toggleDueDateVisibility);
+            gebi('prev-month-btn-header')?.addEventListener('click', () => changeMonth(-1));
+            gebi('next-month-btn-header')?.addEventListener('click', () => changeMonth(1));
+            gebi('today-btn-header')?.addEventListener('click', goToToday);
+            gebi('logout-btn-header')?.addEventListener('click', handleLogout);
+            gebi('fab-add-item')?.addEventListener('click', () => openAddItemModal());
+            gebi('user-menu-btn')?.addEventListener('click', () => switchView('help'));
+        }
+        
+        function switchView(view) {
+            if (!view || AppState.isLoading) return;
+            AppState.currentView = view;
+            
+            qsa('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
+            
+            renderCurrentView();
+            updateHeaderForView(view);
+            
+            gebi('main-content-area').focus();
+        }
+        
+        function updateHeaderForView(view) {
+            const calendarControls = gebi('calendar-controls');
+            if (calendarControls) {
+                calendarControls.style.visibility = (view === 'calendar') ? 'visible' : 'hidden';
+            }
+        }
+
+        function renderCurrentView() {
+            const main = gebi('main-content-area');
+            if (!main) return;
+            let calendarHTML = main.querySelector('#calendar-view')?.outerHTML || renderCalendarView();
+            let tasksHTML = main.querySelector('#tasks-view')?.outerHTML || renderTaskListView();
+            let helpHTML = main.querySelector('#help-view')?.outerHTML || renderHelpView();
+
+            main.innerHTML = calendarHTML + tasksHTML + helpHTML;
+            
+            qsa('.view-section').forEach(section => {
+                section.classList.toggle('active', section.id === `${AppState.currentView}-view`);
+            });
+
+            if (AppState.currentView === 'calendar') {
+                updateMonthYearDisplay();
+                attachCalendarListeners();
+                renderDayDetailArea(AppState.calendar.selectedDate);
+            } else if (AppState.currentView === 'tasks') {
+                attachTaskViewListeners();
+            }
+        }
+        
+        // REFACTOR: Render functions now create full <section> elements.
+        function renderCalendarView() {
+            let html = `<section id="calendar-view" class="view-section" aria-labelledby="calendar-heading">
+                <div class="calendar-grid-container">
+                    <div class="calendar-grid">`;
+            
+            ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].forEach(n => html += `<div class="calendar-day-name">${n}</div>`);
+            
+            const {currentMonth, currentYear} = AppState.calendar;
+            const firstDay = new Date(currentYear, currentMonth, 1);
+            const lastDay = new Date(currentYear, currentMonth + 1, 0);
+            const startDayIndex = (firstDay.getDay() + 6) % 7;
+            const lastDayPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+            for (let i = startDayIndex; i > 0; i--) {
+                html += `<div class="calendar-day other-month"><span class="day-number">${lastDayPrevMonth - i + 1}</span></div>`;
+            }
+
+            const todayStr = dateToYYYYMMDD(new Date());
+            for (let day = 1; day <= lastDay.getDate(); day++) {
+                const date = new Date(currentYear, currentMonth, day);
+                const dateStr = dateToYYYYMMDD(date);
+                const dayOfWeek = (date.getDay() + 6) % 7;
+                let dayClasses = `calendar-day ${dateStr === todayStr ? 'today' : ''} ${dateStr === AppState.calendar.selectedDate ? 'selected' : ''} ${dayOfWeek === 5 ? 'weekend-sat' : ''} ${dayOfWeek === 6 ? 'weekend-sun' : ''}`;
+                
+                // MODIFICACIÓN: Crear lista de eventos en lugar de puntos
+                const eventsOnDay = getItemsForDate(dateStr); // Solo devuelve items de tipo 'agenda'
+                let eventsListHTML = '<div class="day-events-list">';
+                if (eventsOnDay.length > 0) {
+                     eventsOnDay.forEach(event => {
+                        const safeDescription = event.description?.replace(/</g,"&lt;") || '';
+                        eventsListHTML += `<div class="day-event owner-${event.owner}">${safeDescription}</div>`;
+                     });
+                }
+                eventsListHTML += '</div>';
+
+                html += `<div class="${dayClasses}" data-date="${dateStr}" role="button" aria-label="Día ${day}">
+                            <span class="day-number">${day}</span>
+                            ${eventsListHTML}
+                         </div>`;
+            }
+
+            const totalCells = startDayIndex + lastDay.getDate();
+            const remainingCells = (7 - (totalCells % 7)) % 7;
+            for (let i = 1; i <= remainingCells; i++) {
+                html += `<div class="calendar-day other-month"><span class="day-number">${i}</span></div>`;
+            }
+            
+            html += `</div></div><div class="day-detail-area"></div></section>`;
+            return html;
+        }
+        
+        function renderDayDetailArea(dateStr) {
+            const detailArea = qs('#calendar-view .day-detail-area');
+            if (!detailArea) return;
+
+            let html = `<h2 class="list-section-title" id="calendar-heading">Detalles del ${YYYYMMDDToDate(dateStr).toLocaleDateString('es-ES', {weekday: 'long', day: 'numeric', month: 'long'})}</h2>`;
+            const itemsForDay = AppState.items
+                .filter(i => (i.type === 'agenda' && i.dueDate === dateStr))
+                .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+            // MODIFICACIÓN: También mostramos las tareas pendientes generales aquí
+            const pendingTasks = AppState.items.filter(i => i.type === 'task' && !i.isComplete);
+
+            html += `<div class="item-list">`;
+            if (itemsForDay.length > 0) {
+                itemsForDay.forEach(item => html += renderItemCard(item));
+            } else {
+                html += '<p class="no-items">No hay eventos de agenda para este día.</p>';
+            }
+
+            if(pendingTasks.length > 0) {
+                html += `<h3 class="list-section-title">Tareas Pendientes Generales</h3>`;
+                pendingTasks.forEach(item => html += renderItemCard(item));
+            }
+
+            html += `</div>`;
+            detailArea.innerHTML = html;
+            attachItemCardListeners(detailArea.querySelector('.item-list'));
+        }
+        
+        function renderTaskListView() {
+            let html = `<section id="tasks-view" class="view-section" aria-labelledby="tasks-heading">
+                <h2 id="tasks-heading" class="view-title">Tareas</h2>`;
+            
+            const pendingTasks = AppState.items.filter(i => i.type === 'task' && !i.isComplete).sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
+            html += `<h3 class="list-section-title">Pendientes</h3><div class="item-list pending-tasks">`;
+            if (pendingTasks.length > 0) {
+                pendingTasks.forEach(t => html += renderItemCard(t));
+            } else {
+                html += '<p class="no-items">¡Ninguna tarea pendiente! 🎉</p>';
+            }
+            html += `</div>`;
+
+            const completedTasks = AppState.items.filter(i => i.type === 'task' && i.isComplete).sort((a,b) => (b.completedAt||0)-(a.completedAt||0));
+            if (completedTasks.length > 0) {
+                html += `<h3 class="list-section-title">Completadas</h3><div class="item-list completed-tasks">`;
+                completedTasks.slice(0, 15).forEach(t => html += renderItemCard(t));
+                html += `</div>`;
+            }
+            html += `</section>`;
+            return html;
+        }
+        
+        function renderHelpView() {
+            return `<section id="help-view" class="view-section" aria-labelledby="help-heading">
+                <h2 id="help-heading" class="view-title">Ayuda y Configuración</h2>
+                <div class="help-section"><h3>👋 Bienvenida</h3><p>Gestiona tus eventos y tareas. Al iniciar, selecciona tu perfil (<span class="highlight">Dani</span> o <span class="highlight">Norma</span>) y recibirás una <span class="highlight">cita inspiradora</span> antes de entrar.</p></div>
+                <div class="help-section"><h3>🧭 Navegación</h3><p>Usa la barra inferior para moverte entre <span class="highlight">Agenda</span>, <span class="highlight">Tareas</span> y <span class="highlight">Ayuda</span>. Cierra sesión con el icono de salida (arriba-derecha). Añade ítems con el botón <span class="highlight">+</span>.</p></div>
+                <div class="help-section"><h3>🗓️ Calendario</h3><p>Navega meses con <span class="highlight">&lsaquo;</span> y <span class="highlight">&rsaquo;</span>. Pulsa <span class="highlight">Hoy</span> para volver al día actual. Toca un día para ver sus detalles abajo.</p></div>
+                <div class="help-section"><h3>☑️ Gestión de Ítems</h3><p>Acciones en cada tarjeta: <span class="highlight">${ICON_COMPLETE}</span> Completar, <span class="highlight">${ICON_EDIT}</span> Editar, <span class="highlight">${ICON_DUPLICATE}</span> Duplicar, <span class="highlight">${ICON_DELETE}</span> Eliminar.</p></div>
+            </section>`;
+        }
+        
+        function renderItemCard(item) {
+            const ownerClass = `owner-${item.owner||'Comun'}`, completedClass = item.isComplete?'completed':'';
+            const itemDate = item.dueDate ? YYYYMMDDToDate(item.dueDate) : null;
+            const formattedDate = itemDate ? itemDate.toLocaleDateString('es-ES',{day:'2-digit',month:'short'}) : '';
+            const safeDescription = item.description?.replace(/</g,"&lt;")||'';
+            const cardId = item.id || item.localId;
+
+            return `<article class="item-card ${ownerClass} ${completedClass}" data-id="${cardId}" aria-labelledby="item-title-${cardId}">
+                <div class="item-card-content">
+                    <h4 id="item-title-${cardId}" class="item-card-title">${safeDescription}</h4>
+                    <div class="item-card-meta">
+                        <span class="item-card-owner ${ownerClass}">${item.owner||'Común'}</span>
+                        ${item.dueDate ? `<span class="item-card-date">${formattedDate}</span>` : ''}
+                        ${item.type==='task' ? `<button class="item-card-action complete-btn" title="${item.isComplete?'Marcar como pendiente':'Marcar como completada'}">${item.isComplete?'↩️':ICON_COMPLETE}</button>`:''}
+                    </div>
+                </div>
+                <div class="item-card-actions">
+                    <button class="item-card-action edit-btn" title="Editar">${ICON_EDIT}</button>
+                    <button class="item-card-action duplicate-btn" title="Duplicar">${ICON_DUPLICATE}</button>
+                    <button class="item-card-action delete-btn" title="Eliminar">${ICON_DELETE}</button>
+                </div>
+            </article>`;
+        }
+
+        // --- El resto de la lógica de datos no necesita cambios significativos ---
+        
+        function handleLogout() { if (confirm("¿Seguro que quieres cerrar sesión?")) { localStorage.removeItem('currentUser'); AppState.currentUser = null; AppState.items = []; AppState.calendar.selectedDate = dateToYYYYMMDD(new Date()); document.documentElement.style.setProperty('--current-user-accent', 'var(--accent-dani)'); showUserSelectionScreen(); } }
+        function loadDataFromLocalStorage() { try { const sI = localStorage.getItem('items'); if (sI) AppState.items = JSON.parse(sI).map(i => ({ ...i, localId: i.localId || i.id || uuid() })); } catch (e) { AppState.items = []; } }
+        function saveDataToLocalStorage() { try { localStorage.setItem('items', JSON.stringify(AppState.items)); } catch (e) { showToast('Error al guardar datos localmente.'); } }
+        async function fetchDataFromBackend() { if (!AppState.currentUser) return; setLoading(true); const q = new Parse.Query(TODO_ITEM_CLASS_NAME); q.limit(1000); try { const results = await q.find(); const backendItems = results.map(parseObjectToAppItem).filter(Boolean); const backendItemIds = new Set(backendItems.map(i => i.id)); const localOnlyNewItems = AppState.items.filter(localItem => !localItem.id || !backendItemIds.has(localItem.id)); AppState.items = [...backendItems, ...localOnlyNewItems]; saveDataToLocalStorage(); renderCurrentView(); showToast("Datos sincronizados."); } catch (e) { showToast(`Error al sincronizar: ${e.message}.`); renderCurrentView(); } finally { setLoading(false); } }
+        function openModal(modalId) { gebi(modalId).style.display = 'flex'; }
+        function closeModal() { qsa('.modal').forEach(m => m.style.display = 'none'); }
+        function openAddItemModal(itemToEdit = null) { const f = gebi('add-item-form'); if (!f) return; f.reset(); gebi('modal-title').textContent = itemToEdit ? 'Editar Ítem' : 'Añadir Ítem'; gebi('item-id').value = itemToEdit ? itemToEdit.id : ''; gebi('item-local-id').value = itemToEdit ? (itemToEdit.localId || itemToEdit.id) : ''; gebi('item-type').value = itemToEdit ? itemToEdit.type : 'task'; gebi('item-description').value = itemToEdit ? itemToEdit.description : ''; gebi('item-due-date').value = itemToEdit ? (itemToEdit.dueDate || '') : (AppState.currentView === 'calendar' ? AppState.calendar.selectedDate : dateToYYYYMMDD(new Date())); gebi('item-owner').value = itemToEdit ? itemToEdit.owner : (AppState.currentUser?.name || 'Comun'); toggleDueDateVisibility(); openModal('add-item-modal'); }
+        function toggleDueDateVisibility() { gebi('due-date-group').style.display = (gebi('item-type').value === 'agenda') ? 'block' : 'none'; }
+        function handleItemFormSubmit(e) { e.preventDefault(); if (!AppState.currentUser) return; const id = gebi('item-id').value, localId = gebi('item-local-id').value, isUpdate = !!id; const existingItem = getExistingItem(id || localId); const itemData = { id, localId: existingItem?.localId || uuid(), type: gebi('item-type').value, description: gebi('item-description').value.trim(), owner: gebi('item-owner').value, isComplete: existingItem?.isComplete || false, createdAt: existingItem?.createdAt || Date.now(), createdBy: existingItem?.createdBy || AppState.currentUser.name, completedAt: existingItem?.completedAt || null }; if (itemData.type === 'agenda') { itemData.dueDate = gebi('item-due-date').value; if (!itemData.dueDate) { showToast('La fecha es obligatoria para eventos de agenda.'); return; } } else { itemData.dueDate = null; } handleItemSave(itemData, isUpdate); closeModal(); }
+        function getExistingItem(idOrLocalId) { return AppState.items.find(i => i.id === idOrLocalId || i.localId === idOrLocalId); }
+        async function handleItemSave(itemToSave, isUpdate) { if (!AppState.currentUser) return; setLoading(true); let itemForUI = { ...itemToSave, lastModified: Date.now(), lastModifiedBy: AppState.currentUser.name }; if (isUpdate) { const index = AppState.items.findIndex(i => i.id === itemForUI.id || i.localId === itemForUI.localId); if (index > -1) AppState.items[index] = itemForUI; else AppState.items.push(itemForUI); } else { AppState.items.push(itemForUI); } saveDataToLocalStorage(); renderCurrentView(); let parseItem; try { if (isUpdate && itemToSave.id) { parseItem = await new Parse.Query(TODO_ITEM_CLASS_NAME).get(itemToSave.id); } else { parseItem = new (Parse.Object.extend(TODO_ITEM_CLASS_NAME))(); parseItem.set('createdBy', AppState.currentUser.name); parseItem.set('localId', itemToSave.localId); } parseItem.set('type', itemToSave.type); parseItem.set('description', itemToSave.description); parseItem.set('owner', itemToSave.owner); parseItem.set('isComplete', itemToSave.isComplete || false); parseItem.set('lastModifiedBy', AppState.currentUser.name); if (itemToSave.completedAt) parseItem.set('completedAt', new Date(itemToSave.completedAt)); else parseItem.unset('completedAt'); if (itemToSave.type === 'agenda' && itemToSave.dueDate) parseItem.set('dueDate', YYYYMMDDToDate(itemToSave.dueDate)); else parseItem.unset('dueDate'); const savedParseItem = await parseItem.save(); const savedAppItem = parseObjectToAppItem(savedParseItem); if (savedAppItem) { const idx = AppState.items.findIndex(i => i.localId === itemToSave.localId || i.id === savedAppItem.id); if (idx > -1) AppState.items[idx] = savedAppItem; else AppState.items.push(savedAppItem); } saveDataToLocalStorage(); renderCurrentView(); showToast(`Ítem ${isUpdate ? 'actualizado' : 'añadido'}.`); } catch (e) { showToast(`Error al guardar en la nube: ${e.message}`); } finally { setLoading(false); } }
+        async function handleItemDelete(idOrLocalId) { if (!confirm("¿Eliminar este ítem?")) return; setLoading(true); const itemIndex = AppState.items.findIndex(i => i.id === idOrLocalId || i.localId === idOrLocalId); if (itemIndex === -1) { setLoading(false); return; } const itemToDelete = AppState.items.splice(itemIndex, 1)[0]; saveDataToLocalStorage(); renderCurrentView(); if (itemToDelete.id && itemToDelete.id !== itemToDelete.localId) { try { await Parse.Object.extend(TODO_ITEM_CLASS_NAME).createWithoutData(itemToDelete.id).destroy(); showToast('Ítem eliminado.'); } catch (e) { showToast(`Error al eliminar en la nube.`); } } else { showToast('Ítem local eliminado.'); } setLoading(false); }
+        async function handleItemDuplicate(idOrLocalId) { const itemToDup = getExistingItem(idOrLocalId); if (!itemToDup) return; const newItemData = { localId: uuid(), type: itemToDup.type, description: itemToDup.description, owner: itemToDup.owner, isComplete: false, createdAt: Date.now(), createdBy: AppState.currentUser.name, completedAt: null, dueDate: itemToDup.dueDate }; handleItemSave(newItemData, false); showToast('Ítem duplicado.'); }
+        async function handleItemComplete(idOrLocalId, isComplete) { const itemIndex = AppState.items.findIndex(i => i.id === idOrLocalId || i.localId === idOrLocalId); if (itemIndex === -1) return; const itemToUpdate = { ...AppState.items[itemIndex], isComplete: isComplete, completedAt: isComplete ? Date.now() : null }; handleItemSave(itemToUpdate, true); showToast(isComplete ? 'Tarea completada.' : 'Tarea marcada como pendiente.'); }
+        function updateMonthYearDisplay() { const display = gebi('current-month-year-display'); if (!display) return; if (AppState.currentView === 'calendar') { const { currentMonth, currentYear } = AppState.calendar; display.textContent = `${new Date(currentYear, currentMonth).toLocaleString('es-ES', { month: 'long' })} ${currentYear}`; } }
+        function attachItemCardListeners(containerElement) { if (!containerElement) return; containerElement.querySelectorAll('.item-card').forEach(card => { const id = card.dataset.id; if (!id) return; card.querySelector('.edit-btn')?.addEventListener('click', e => { e.stopPropagation(); openAddItemModal(getExistingItem(id)); }); card.querySelector('.delete-btn')?.addEventListener('click', e => { e.stopPropagation(); handleItemDelete(id); }); card.querySelector('.duplicate-btn')?.addEventListener('click', e => { e.stopPropagation(); handleItemDuplicate(id); }); card.querySelector('.complete-btn')?.addEventListener('click', e => { e.stopPropagation(); const item = getExistingItem(id); if (item) handleItemComplete(id, !item.isComplete); }); }); }
+        function attachCalendarListeners() { qsa('.calendar-day:not(.other-month)').forEach(dayCell => dayCell.addEventListener('click', () => selectDate(dayCell.dataset.date))); }
+        function attachTaskViewListeners() { attachItemCardListeners(qs('#tasks-view')); }
+        // MODIFICACIÓN: La función ahora solo devuelve items de tipo 'agenda' para el calendario.
+        function getItemsForDate(dateStr) { return AppState.items.filter(i => i.type === 'agenda' && i.dueDate === dateStr).sort((a,b) => (a.createdAt||0)-(b.createdAt||0)); }
+        function changeMonth(delta) { AppState.calendar.currentMonth += delta; if (AppState.calendar.currentMonth < 0) { AppState.calendar.currentMonth = 11; AppState.calendar.currentYear--; } else if (AppState.calendar.currentMonth > 11) { AppState.calendar.currentMonth = 0; AppState.calendar.currentYear++; } if (AppState.currentView === 'calendar') { const calView = qs('#calendar-view'); if (calView) calView.outerHTML = renderCalendarView(); renderCurrentView(); } }
+        function goToToday() { const today = new Date(); AppState.calendar.currentMonth = today.getMonth(); AppState.calendar.currentYear = today.getFullYear(); AppState.calendar.selectedDate = dateToYYYYMMDD(today); if (AppState.currentView !== 'calendar') switchView('calendar'); else { const calView = qs('#calendar-view'); if (calView) calView.outerHTML = renderCalendarView(); renderCurrentView(); } }
+        function selectDate(dateStr) { AppState.calendar.selectedDate = dateStr; qs('.calendar-day.selected')?.classList.remove('selected'); qs(`.calendar-day[data-date="${dateStr}"]`)?.classList.add('selected'); renderDayDetailArea(dateStr); }
+    </script>
+    <script>
+        // REFACTOR: Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(registration => console.log('ServiceWorker registration successful with scope: ', registration.scope))
+                    .catch(err => console.log('ServiceWorker registration failed: ', err));
+            });
+        }
+    </script>
+</body>
+</html>
